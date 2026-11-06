@@ -20,7 +20,8 @@ from app.models.twin import DigitalTwin
 from app.services.auth_service import get_current_user_id
 from app.services.shap_service import get_shap_service
 
-logger = logging.getLogger(_name_)
+# ✅ FIXED: Changed _name_ to __name__
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/timeline", tags=["Timeline"])
 
