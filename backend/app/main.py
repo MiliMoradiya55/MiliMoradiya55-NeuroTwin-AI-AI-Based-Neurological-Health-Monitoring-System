@@ -15,10 +15,13 @@ app = FastAPI(
     redoc_url="/api/redoc"
 )
 
-# CORS - Allow frontend
+# ========================================================
+# ✅ FIXED CORS CONFIGURATION
+# ========================================================
+# અમે "*" (બધા માટે) મંજૂરી આપી છે, જેથી તમારી Vercel વેબસાઇટ કનેક્ટ થઈ શકે.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=["*"],  # અથવા તમે ફક્ત તમારી લિંક રાખવા માંગો તો: ["https://neuro-twin-ai-based-neurological-tau.vercel.app"]
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -36,7 +39,7 @@ app.include_router(face.router, prefix="/api/v1", tags=["Face"])
 app.include_router(memory.router, prefix="/api/v1", tags=["Memory"])
 app.include_router(typing_assessment.router, prefix="/api/v1", tags=["Typing"])
 app.include_router(feedback.router, prefix="/api/v1", tags=["Feedback"])
-app.include_router(chat.router, prefix="/api/v1", tags=["AI Chat"])  # ✅ Added
+app.include_router(chat.router, prefix="/api/v1", tags=["AI Chat"])
 
 
 @app.on_event("startup")
