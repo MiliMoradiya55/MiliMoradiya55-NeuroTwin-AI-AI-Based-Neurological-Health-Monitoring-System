@@ -20,7 +20,7 @@ from app.models.twin import DigitalTwin
 from app.services.auth_service import get_current_user_id
 from app.services.shap_service import get_shap_service
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(_name_)
 
 router = APIRouter(prefix="/timeline", tags=["Timeline"])
 
@@ -54,6 +54,40 @@ def _get_baseline_score(db: Session, model, user_id: int, score_field: str = "sc
     return round(sum(scores) / len(scores), 1) if scores else 0.0
 
 
+def _calculate_streak(db: Session, user_id: int) -> int:
+    """Calculate current streak of consecutive days with at least one assessment"""
+    dates = set()
+    
+    # Check all 5 modules for assessment dates
+    for model in [VoiceAssessment, MemoryAssessment, TremorAssessment, TypingAssessment, FaceAssessment]:
+        records = db.query(model.completed_at).filter(
+            model.user_id == user_id,
+            model.completed_at.isnot(None)
+        ).all()
+        for r in records:
+            if r.completed_at:
+                dates.add(r.completed_at.date())
+                
+    if not dates:
+        return 0
+
+    streak = 0
+    current_date = datetime.utcnow().date()
+
+    # Check backwards from today
+    for i in range(365):
+        check_date = current_date - timedelta(days=i)
+        if check_date in dates:
+            streak += 1
+        else:
+            # If they haven't done one today yet, allow the streak to count from yesterday
+            if i == 0:
+                continue
+            break
+
+    return streak
+
+
 def _calculate_brain_health(db: Session, user_id: int) -> dict:
     """
     Single source of truth for Brain Health calculation.
@@ -85,6 +119,9 @@ def _calculate_brain_health(db: Session, user_id: int) -> dict:
     if baseline_health > 0:
         change_percent = round((brain_health - baseline_health) / baseline_health * 100, 1)
 
+    # Calculate real streak
+    streak = _calculate_streak(db, user_id)
+
     return {
         "brain_health_score": brain_health,
         "baseline_brain_health": baseline_health,
@@ -94,6 +131,7 @@ def _calculate_brain_health(db: Session, user_id: int) -> dict:
         "change_points": round(brain_health - baseline_health, 1),
         "highest_score": max(valid_latest) if valid_latest else 0.0,
         "lowest_score": min(valid_latest) if valid_latest else 0.0,
+        "streak": streak,
     }
 
 
@@ -439,6 +477,7 @@ async def get_brain_health_score(
         print(f"  Score: {result['brain_health_score']}")
         print(f"  Baseline: {result['baseline_brain_health']}")
         print(f"  Modules: {result['modules']}")
+        print(f"  Streak: {result['streak']} days")
         print("=" * 70)
 
         return {"status": "success", "data": result}
@@ -495,7 +534,7 @@ async def get_dashboard_data(
             "change": result["change_percent"],
             "change_points": result["change_points"],
             "total_assessments": total_assessments,
-            "streak": 2,
+            "streak": result["streak"],
             "highest_score": result["highest_score"],
             "lowest_score": result["lowest_score"],
             "last_assessment": last_assessment,
@@ -507,6 +546,7 @@ async def get_dashboard_data(
         print("🚀 DASHBOARD RESPONSE:")
         print(f"  Brain Health: {response_data['brain_health_score']}")
         print(f"  Baseline: {response_data['baseline_brain_health']}")
+        print(f"  Streak: {response_data['streak']} days")
         print(f"  Modules: {response_data['modules']}")
         print("=" * 70)
 
@@ -605,7 +645,7 @@ async def get_timeline_data(
     """
     Smart Adaptive Timeline.
     GRAPH: per-period AVERAGES for ALL points (including last).
-    CARDS: uses `latest_module_scores` from this response.
+    CARDS: uses latest_module_scores from this response.
     """
     try:
         if user_id != current_user_id:
@@ -709,17 +749,13 @@ async def get_timeline_data(
                             grouped[day_key]['all'].append(a['score'])
             else:
                 # ---------- WEEK-WISE (older data) ----------
-                # FIX: Bucket into last N weeks (7-day windows) ending at latest_date
                 mode_used = "WEEK-WISE (older data)"
 
-                # Determine how many weeks to show (up to 4)
                 total_weeks = max(1, (data_span_days // 7) + 1)
                 num_weeks = min(total_weeks, 4)
 
-                # Build windows from oldest to newest
                 week_specs = []
                 for i in range(num_weeks):
-                    # i = 0 → oldest week
                     weeks_from_latest = num_weeks - 1 - i
                     end_offset = 7 * weeks_from_latest
                     start_offset = end_offset + 7
@@ -731,7 +767,6 @@ async def get_timeline_data(
                         'sort_key': i + 1,
                     })
 
-                # Initialize all buckets (so empty weeks still show)
                 for wk in week_specs:
                     grouped[wk['label']] = {
                         'voice': [], 'memory': [], 'tremor': [], 'typing': [], 'face': [],
@@ -739,11 +774,9 @@ async def get_timeline_data(
                         'date': None,
                     }
 
-                # Assign each assessment to its week bucket
                 for a in all_assessments:
                     a_date = a['completed_at']
                     for wk in week_specs:
-                        # Include (start, end]  — for W1 include earliest, for W4 include latest
                         if wk['start'] < a_date <= wk['end']:
                             grouped[wk['label']][a['type']].append(a['score'])
                             grouped[wk['label']]['all'].append(a['score'])

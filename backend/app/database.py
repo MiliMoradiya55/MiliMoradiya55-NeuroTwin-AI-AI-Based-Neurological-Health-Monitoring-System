@@ -46,6 +46,7 @@
 #         Feedback
 #     )
 #     Base.metadata.create_all(bind=engine)
+<<<<<<< HEAD
 #     print("✅ Database initialized successfully!")
 
 
@@ -53,6 +54,9 @@
 
 
 # backend/app/database.py
+=======
+
+>>>>>>> ccb24d72f4791189eba219a52c904a58cb5a0e19
 
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
@@ -98,4 +102,9 @@ def init_db():
         Feedback
     )
     Base.metadata.create_all(bind=engine)
+<<<<<<< HEAD
     print("✅ Database initialized successfully with PostgreSQL!")
+=======
+    print("✅ Database initialized successfully with PostgreSQL!")
+#     print("✅ Database initialized successfully!")
+>>>>>>> ccb24d72f4791189eba219a52c904a58cb5a0e19
